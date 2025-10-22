@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Sabre\DAV;
 
+use Generator;
 use Sabre\DAV\Exception\BadRequest;
 use Sabre\HTTP\RequestInterface;
 use Sabre\HTTP\ResponseInterface;
@@ -304,11 +305,13 @@ class CorePlugin extends ServerPlugin
     public function httpPropFind(RequestInterface $request, ResponseInterface $response)
     {
         $propFindXml = $this->parseRequestedProperties($request);
-        $newProperties = $this->server->getPropertiesIteratorForPath(
+        $propFindRequests = $this->server->generatePropFindsForPath(
             $request->getPath(),
             $propFindXml->properties,
             $this->getDepth()
         );
+        $this->server->emit('beforePropFind', [&$propFindRequests]);
+        $fileProperties = $this->server->getPropertiesIteratorForRequests($propFindRequests);
 
         // This is a multi-status response
         $response->setStatus(207);
@@ -328,7 +331,7 @@ class CorePlugin extends ServerPlugin
         $prefer = $this->server->getHTTPPrefer();
         $minimal = 'minimal' === $prefer['return'];
 
-        $data = $this->server->generateMultiStatus($newProperties, $minimal);
+        $data = $this->server->generateMultiStatus($fileProperties, $minimal);
         $response->setBody($data);
 
         // Sending back false will interrupt the event chain and tell the server
